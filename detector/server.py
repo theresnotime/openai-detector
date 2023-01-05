@@ -7,12 +7,16 @@ from transformers import RobertaForSequenceClassification, RobertaTokenizer
 import json
 import fire
 import torch
-from urllib.parse import urlparse, unquote, parse_qs
-
+import re
+from urllib.parse import urlparse, unquote, parse_qs, urlencode
 
 model: RobertaForSequenceClassification = None
 tokenizer: RobertaTokenizer = None
 device: str = None
+
+# Remove spaces query params from query
+regex = r"__theme=(.+)"
+
 
 def log(*args):
     print(f"[{os.environ.get('RANK', '')}]", *args, file=sys.stderr)
@@ -45,10 +49,11 @@ class RequestHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
 
     def do_GET(self):
-        parsed = urlparse(self.path)
-        query_params = parse_qs(parsed.query)
+        query = urlparse(self.path).query
+        query = re.sub(regex, "", query, 0, re.MULTILINE)
+        query = unquote(query)
 
-        if 'text' not in query_params:
+        if not query:
             self.begin_content('text/html')
 
             html = os.path.join(os.path.dirname(__file__), 'index.html')
@@ -57,7 +62,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
 
         self.begin_content('application/json;charset=UTF-8')
 
-        all_tokens, used_tokens, fake, real = self.infer(unquote(query_params['text'][0]))
+        all_tokens, used_tokens, fake, real = self.infer(query)
 
         self.wfile.write(json.dumps(dict(
             all_tokens=all_tokens,
