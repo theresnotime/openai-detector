@@ -7,7 +7,7 @@ from transformers import RobertaForSequenceClassification, RobertaTokenizer
 import json
 import fire
 import torch
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, parse_qs
 
 
 model: RobertaForSequenceClassification = None
@@ -45,9 +45,10 @@ class RequestHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
 
     def do_GET(self):
-        query = unquote(urlparse(self.path).query)
+        parsed = urlparse(self.path)
+        query_params = parse_qs(parsed.query)
 
-        if not query:
+        if 'text' not in query_params:
             self.begin_content('text/html')
 
             html = os.path.join(os.path.dirname(__file__), 'index.html')
@@ -56,7 +57,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
 
         self.begin_content('application/json;charset=UTF-8')
 
-        all_tokens, used_tokens, fake, real = self.infer(query)
+        all_tokens, used_tokens, fake, real = self.infer(unquote(query_params['text'][0]))
 
         self.wfile.write(json.dumps(dict(
             all_tokens=all_tokens,
@@ -147,4 +148,3 @@ def main(checkpoint, port=8080, device='cuda' if torch.cuda.is_available() else 
 
 if __name__ == '__main__':
     fire.Fire(main)
-
