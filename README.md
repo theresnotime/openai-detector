@@ -1,3 +1,10 @@
+---
+title: openai-detector
+emoji: 👁️
+colorFrom: blue
+colorTo: red
+sdk: docker
+---
 # gpt-2-output-dataset
 
 This dataset contains:
