@@ -20,30 +20,6 @@ def log(*args):
 
 class RequestHandler(SimpleHTTPRequestHandler):
 
-    def do_POST(self):
-        self.begin_content('application/json,charset=UTF-8')
-
-        content_length = int(self.headers['Content-Length'])
-        if content_length > 0:
-            post_data = self.rfile.read(content_length).decode('utf-8')
-            try:
-                post_data = json.loads(post_data)
-
-                if 'text' not in post_data:
-                    self.wfile.write(json.dumps({"error": "missing key 'text'"}).encode('utf-8'))
-                else:
-                    all_tokens, used_tokens, fake, real = self.infer(post_data['text'])
-
-                    self.wfile.write(json.dumps(dict(
-                        all_tokens=all_tokens,
-                        used_tokens=used_tokens,
-                        real_probability=real,
-                        fake_probability=fake
-                    )).encode('utf-8'))
-
-            except Exception as e:
-                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
-
     def do_GET(self):
         query = unquote(urlparse(self.path).query)
 
@@ -56,16 +32,6 @@ class RequestHandler(SimpleHTTPRequestHandler):
 
         self.begin_content('application/json;charset=UTF-8')
 
-        all_tokens, used_tokens, fake, real = self.infer(query)
-
-        self.wfile.write(json.dumps(dict(
-            all_tokens=all_tokens,
-            used_tokens=used_tokens,
-            real_probability=real,
-            fake_probability=fake
-        )).encode())
-
-    def infer(self, query):
         tokens = tokenizer.encode(query)
         all_tokens = len(tokens)
         tokens = tokens[:tokenizer.max_len - 2]
@@ -79,7 +45,12 @@ class RequestHandler(SimpleHTTPRequestHandler):
 
         fake, real = probs.detach().cpu().flatten().numpy().tolist()
 
-        return all_tokens, used_tokens, fake, real
+        self.wfile.write(json.dumps(dict(
+            all_tokens=all_tokens,
+            used_tokens=used_tokens,
+            real_probability=real,
+            fake_probability=fake
+        )).encode())
 
     def begin_content(self, content_type):
         self.send_response(200)
@@ -147,4 +118,3 @@ def main(checkpoint, port=8080, device='cuda' if torch.cuda.is_available() else 
 
 if __name__ == '__main__':
     fire.Fire(main)
-
