@@ -16,7 +16,7 @@ joblib==0.14.0
 Markdown==3.1.1
 numpy==1.17.3 # Missed breaking change, `AttributeError: module 'numpy' has no attribute 'object'.`
 oauthlib==3.1.0
-protobuf==3.10.0
+protobuf==4.22.0
 pyasn1==0.4.7
 pyasn1-modules==0.2.7
 python-dateutil==2.8.0
