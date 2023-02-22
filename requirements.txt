@@ -12,7 +12,7 @@ google-auth-oauthlib==0.4.1
 grpcio==1.25.0
 idna==2.8
 jmespath==0.9.4
-joblib==0.14.0
+joblib==1.2.0
 Markdown==3.1.1
 numpy==1.17.3 # Missed breaking change, `AttributeError: module 'numpy' has no attribute 'object'.`
 oauthlib==3.1.0
