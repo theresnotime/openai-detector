@@ -1,14 +1,15 @@
+import json
 import os
+import re
+import subprocess
 import sys
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from multiprocessing import Process
-import subprocess
-from transformers import RobertaForSequenceClassification, RobertaTokenizer
-import json
+from urllib.parse import unquote, urlparse
+
 import fire
 import torch
-import re
-from urllib.parse import urlparse, unquote, parse_qs, urlencode
+from transformers import RobertaForSequenceClassification, RobertaTokenizer
 
 model: RobertaForSequenceClassification = None
 tokenizer: RobertaTokenizer = None
@@ -23,30 +24,35 @@ def log(*args):
 
 
 class RequestHandler(SimpleHTTPRequestHandler):
-
     def do_POST(self):
-        self.begin_content('application/json,charset=UTF-8')
+        self.begin_content("application/json,charset=UTF-8")
 
-        content_length = int(self.headers['Content-Length'])
+        content_length = int(self.headers["Content-Length"])
         if content_length > 0:
-            post_data = self.rfile.read(content_length).decode('utf-8')
+            post_data = self.rfile.read(content_length).decode("utf-8")
             try:
                 post_data = json.loads(post_data)
 
-                if 'text' not in post_data:
-                    self.wfile.write(json.dumps({"error": "missing key 'text'"}).encode('utf-8'))
+                if "text" not in post_data:
+                    self.wfile.write(
+                        json.dumps({"error": "missing key 'text'"}).encode("utf-8")
+                    )
                 else:
-                    all_tokens, used_tokens, fake, real = self.infer(post_data['text'])
+                    all_tokens, used_tokens, fake, real = self.infer(post_data["text"])
 
-                    self.wfile.write(json.dumps(dict(
-                        all_tokens=all_tokens,
-                        used_tokens=used_tokens,
-                        real_probability=real,
-                        fake_probability=fake
-                    )).encode('utf-8'))
+                    self.wfile.write(
+                        json.dumps(
+                            dict(
+                                all_tokens=all_tokens,
+                                used_tokens=used_tokens,
+                                real_probability=real,
+                                fake_probability=fake,
+                            )
+                        ).encode("utf-8")
+                    )
 
             except Exception as e:
-                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+                self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
 
     def do_GET(self):
         query = urlparse(self.path).query
@@ -54,29 +60,35 @@ class RequestHandler(SimpleHTTPRequestHandler):
         query = unquote(query)
 
         if not query:
-            self.begin_content('text/html')
+            self.begin_content("text/html")
 
-            html = os.path.join(os.path.dirname(__file__), 'index.html')
+            html = os.path.join(os.path.dirname(__file__), "index.html")
             self.wfile.write(open(html).read().encode())
             return
 
-        self.begin_content('application/json;charset=UTF-8')
+        self.begin_content("application/json;charset=UTF-8")
 
         all_tokens, used_tokens, fake, real = self.infer(query)
 
-        self.wfile.write(json.dumps(dict(
-            all_tokens=all_tokens,
-            used_tokens=used_tokens,
-            real_probability=real,
-            fake_probability=fake
-        )).encode())
+        self.wfile.write(
+            json.dumps(
+                dict(
+                    all_tokens=all_tokens,
+                    used_tokens=used_tokens,
+                    real_probability=real,
+                    fake_probability=fake,
+                )
+            ).encode()
+        )
 
     def infer(self, query):
         tokens = tokenizer.encode(query)
         all_tokens = len(tokens)
-        tokens = tokens[:tokenizer.max_len - 2]
+        tokens = tokens[: tokenizer.max_len - 2]
         used_tokens = len(tokens)
-        tokens = torch.tensor([tokenizer.bos_token_id] + tokens + [tokenizer.eos_token_id]).unsqueeze(0)
+        tokens = torch.tensor(
+            [tokenizer.bos_token_id] + tokens + [tokenizer.eos_token_id]
+        ).unsqueeze(0)
         mask = torch.ones_like(tokens)
 
         with torch.no_grad():
@@ -89,8 +101,8 @@ class RequestHandler(SimpleHTTPRequestHandler):
 
     def begin_content(self, content_type):
         self.send_response(200)
-        self.send_header('Content-Type', content_type)
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header("Content-Type", content_type)
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
 
     def log_message(self, format, *args):
@@ -98,58 +110,64 @@ class RequestHandler(SimpleHTTPRequestHandler):
 
 
 def serve_forever(server, model, tokenizer, device):
-    log('Process has started; loading the model ...')
-    globals()['model'] = model.to(device)
-    globals()['tokenizer'] = tokenizer
-    globals()['device'] = device
+    log("Process has started; loading the model ...")
+    globals()["model"] = model.to(device)
+    globals()["tokenizer"] = tokenizer
+    globals()["device"] = device
 
-    log(f'Ready to serve at http://localhost:{server.server_address[1]}')
+    log(f"Ready to serve at http://localhost:{server.server_address[1]}")
     server.serve_forever()
 
 
-def main(checkpoint, port=8080, device='cuda' if torch.cuda.is_available() else 'cpu'):
-    if checkpoint.startswith('gs://'):
-        print(f'Downloading {checkpoint}', file=sys.stderr)
-        subprocess.check_output(['gsutil', 'cp', checkpoint, '.'])
+def main(checkpoint, port=8080, device="cuda" if torch.cuda.is_available() else "cpu"):
+    if checkpoint.startswith("gs://"):
+        print(f"Downloading {checkpoint}", file=sys.stderr)
+        subprocess.check_output(["gsutil", "cp", checkpoint, "."])
         checkpoint = os.path.basename(checkpoint)
         assert os.path.isfile(checkpoint)
 
-    print(f'Loading checkpoint from {checkpoint}')
-    data = torch.load(checkpoint, map_location='cpu')
+    print(f"Loading checkpoint from {checkpoint}")
+    data = torch.load(checkpoint, map_location="cpu")
 
-    model_name = 'roberta-large' if data['args']['large'] else 'roberta-base'
+    model_name = "roberta-large" if data["args"]["large"] else "roberta-base"
     model = RobertaForSequenceClassification.from_pretrained(model_name)
     tokenizer = RobertaTokenizer.from_pretrained(model_name)
 
-    model.load_state_dict(data['model_state_dict'])
+    model.load_state_dict(data["model_state_dict"])
     model.eval()
 
-    print(f'Starting HTTP server on port {port}', file=sys.stderr)
-    server = HTTPServer(('0.0.0.0', port), RequestHandler)
+    print(f"Starting HTTP server on port {port}", file=sys.stderr)
+    server = HTTPServer(("0.0.0.0", port), RequestHandler)
 
     # avoid calling CUDA API before forking; doing so in a subprocess is fine.
-    num_workers = int(subprocess.check_output([sys.executable, '-c', 'import torch; print(torch.cuda.device_count())']))
+    num_workers = int(
+        subprocess.check_output(
+            [sys.executable, "-c", "import torch; print(torch.cuda.device_count())"]
+        )
+    )
 
     if num_workers <= 1:
         serve_forever(server, model, tokenizer, device)
     else:
-        print(f'Launching {num_workers} worker processes...')
+        print(f"Launching {num_workers} worker processes...")
 
         subprocesses = []
 
         for i in range(num_workers):
-            os.environ['RANK'] = f'{i}'
-            os.environ['CUDA_VISIBLE_DEVICES'] = f'{i}'
-            process = Process(target=serve_forever, args=(server, model, tokenizer, device))
+            os.environ["RANK"] = f"{i}"
+            os.environ["CUDA_VISIBLE_DEVICES"] = f"{i}"
+            process = Process(
+                target=serve_forever, args=(server, model, tokenizer, device)
+            )
             process.start()
             subprocesses.append(process)
 
-        del os.environ['RANK']
-        del os.environ['CUDA_VISIBLE_DEVICES']
+        del os.environ["RANK"]
+        del os.environ["CUDA_VISIBLE_DEVICES"]
 
         for process in subprocesses:
             process.join()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     fire.Fire(main)
