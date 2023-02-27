@@ -24,7 +24,7 @@ regex==2019.11.1
 requests==2.22.0
 requests-oauthlib==1.3.0
 rsa==4.9
-s3transfer==0.2.1
+s3transfer==0.6.0
 sacremoses==0.0.35
 sentencepiece==0.1.97
 six==1.13.0
